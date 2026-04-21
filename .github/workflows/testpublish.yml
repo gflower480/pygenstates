@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: testpypi
-      url: https://testpypi.org/p/pygenstates
+      url: https://test.pypi.org/p/pygenstates
     permissions:
       contents: read
       id-token: write
