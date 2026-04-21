@@ -34,7 +34,7 @@ jobs:
           path: dist/*
 
   publish:
-    name: Publish to PyPI
+    name: Publish to TestPyPI
     needs: build
     runs-on: ubuntu-latest
     environment:
@@ -53,3 +53,5 @@ jobs:
 
       - name: Publish package
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
