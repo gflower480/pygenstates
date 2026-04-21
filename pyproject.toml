@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pygenstates"
+version = "0.1.0"
+description = "A Python solver for time-independent Schrodinger eigenvalue problems."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "scipy",
+    "scikit-fem",
+]
+
+[project.optional-dependencies]
+examples = [
+    "ipykernel",
+    "matplotlib",
+    "notebook",
+]
+
+[tool.setuptools.packages.find]
+include = ["pygenstates*"]

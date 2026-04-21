@@ -7,8 +7,8 @@ scikit-fem backend while keeping the public call format consistent.
 
 import warnings
 
-import eigensolver_FD as _fd
-import eigensolver_FEM as _fem
+from . import eigensolver_fd as _fd
+from . import eigensolver_fem as _fem
 
 
 __all__ = ["eigensolver", "Ceigensolver", "available_methods"]
