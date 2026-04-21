@@ -1,0 +1,46 @@
+Metadata-Version: 2.4
+Name: pygenstates
+Version: 0.1.0
+Summary: A Python solver for time-independent Schrodinger eigenvalue problems.
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: numpy
+Requires-Dist: scipy
+Requires-Dist: scikit-fem
+Provides-Extra: examples
+Requires-Dist: ipykernel; extra == "examples"
+Requires-Dist: matplotlib; extra == "examples"
+Requires-Dist: notebook; extra == "examples"
+Dynamic: license-file
+
+# pygenstates
+
+A Python solver for the time-independent Schrodinger equation, with support for n-dimensional continuous bases and coupled discrete bases. The package supports a range of Hamiltonians, with circuit QED applications in mind.
+
+## Installation
+
+Install from the project root with:
+
+```bash
+pip install .
+```
+
+For development, install in editable mode:
+
+```bash
+pip install -e .
+```
+
+To run the example notebooks, install the optional notebook dependencies:
+
+```bash
+pip install -e ".[examples]"
+```
+
+## Examples
+
+Worked examples are included in the `examples` folder:
+
+- `examples/getting_started_examples.ipynb`
+- `examples/advanced_examples.ipynb`

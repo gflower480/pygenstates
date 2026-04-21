@@ -1,0 +1,8 @@
+numpy
+scipy
+scikit-fem
+
+[examples]
+ipykernel
+matplotlib
+notebook
