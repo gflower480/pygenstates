@@ -18,7 +18,7 @@ Useful links:
 
 ## Documentation
 
-Read the Docs page to be added soon...
+Find documentation on [Read the Docs](https://pygenstates.readthedocs.io/en/latest/).
 
 ## Examples
 
