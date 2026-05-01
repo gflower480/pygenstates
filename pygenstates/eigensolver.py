@@ -55,11 +55,9 @@ def eigensolver(U, N=[], domain=[], k_diag=[1], k_cross=[], method="finite_diffe
     """
     Solve a time-independent Schrodinger eigenvalue problem.
 
-    The Hamiltonian convention is
+    The Hamiltonian convention is::
 
-        H = -sum_i k_diag[i] d^2/dx_i^2
-            + sum_{i<j} k_cross[i,j] d^2/(dx_i dx_j)
-            + U(x)
+        H = -sum_i k_ii d^2/dx_i^2 -sum_{i<j} k_ij d^2/(dx_i dx_j) + U(x_i)
 
     and the solver returns eigenpairs satisfying ``H psi = E psi`` on a
     rectangular domain with zero Dirichlet boundary conditions.
@@ -77,12 +75,12 @@ def eigensolver(U, N=[], domain=[], k_diag=[1], k_cross=[], method="finite_diffe
         Bounds for each coordinate, with the same length as ``N``.
         For example, ``[(-5, 5)]`` or ``[(-3, 3), (-3, 3)]``.
     k_diag : sequence of float or complex
-        Diagonal kinetic coefficients, one per spatial dimension.
+        Diagonal kinetic coefficients ``k_ii``, one per spatial dimension.
     k_cross : dict or scalar or None, optional
         Mixed-derivative coefficients. Use ``{(i, j): value}`` for the
-        coefficient multiplying ``d^2/(dx_i dx_j)``. In 2D, a scalar is accepted
-        as shorthand for ``{(0, 1): value}``. Use ``None`` or ``[]`` for no
-        mixed derivative terms.
+        coefficient multiplying ``-d^2/(dx_i dx_j)``. In 2D, a scalar is
+        accepted as shorthand for ``{(0, 1): value}``. Use ``None`` or ``[]``
+        for no mixed derivative terms.
     method : {"finite_difference", "FEM"}, optional
         Numerical backend. ``"finite_difference"`` is the default and supports
         arbitrary dimension. ``"FEM"`` uses scikit-fem and supports 1D, 2D, and
@@ -158,14 +156,18 @@ def Ceigensolver(U, H1, N=[], domain=[], k_diag=[1], k_cross=[],
     Solve a continuous Schrodinger problem coupled to a discrete basis.
 
     The state has components ``Psi_m(x)`` in an ``M``-dimensional discrete
-    basis. The Hamiltonian is assembled as
+    basis. The Hamiltonian is assembled as::
 
         H = H0(x) + H1 + Hc
 
-    where ``H0`` is the continuous Hamiltonian described by ``U``, ``k_diag``,
-    and ``k_cross``; ``H1`` is an ``M x M`` matrix acting only in the discrete
-    basis; and ``Hc`` contains derivative and/or position couplings between
-    discrete levels.
+    where::
+
+        H0 = -sum_i k_ii d^2/dx_i^2 -sum_{i<j} k_ij d^2/(dx_i dx_j) + U(x_i)
+
+        H1 = sum_n E_n |n><n|
+
+        Hc = sum_i sum_{n>m} (-k_c[i,n,m] d/dx_i + v_c[i,n,m] x_i)|n><m| 
+            + Hermitian conjugate
 
     Parameters
     ----------
@@ -174,19 +176,47 @@ def Ceigensolver(U, H1, N=[], domain=[], k_diag=[1], k_cross=[],
     H1 : array_like, shape (M, M)
         Matrix acting on the discrete basis. It must be Hermitian unless
         ``nonHermitian=True``.
-    N, domain, k_diag, k_cross, method, Enum, vals_only, intorder,
-    nonHermitian, **eigsh_kwargs
-        Same meaning as in ``eigensolver``.
-    k_coup : scalar, matrix, dict, or None, optional
+    N : sequence of int
+        Number of grid points in each spatial dimension.
+    domain : sequence of tuple(float, float)
+        Bounds for each coordinate, with the same length as ``N``.
+    k_diag : sequence of float or complex
+        Diagonal kinetic coefficients ``k_ii``, one per spatial dimension.
+    k_cross : dict or scalar or None, optional
+        Mixed-derivative coefficients for the continuous Hamiltonian ``H0``.
+        Uses the same convention as ``eigensolver``:
+        ``{(i, j): value}`` multiplies ``-d^2/(dx_i dx_j)``.
+    method : {"finite_difference", "FEM"}, optional
+        Numerical backend.
+    Enum : int, optional
+        Number of eigenvalues/eigenvectors to compute.
+    vals_only : bool, optional
+        If True, return only eigenvalues and coordinate grids.
+    intorder : int or None, optional
+        Integration order passed to ``skfem.Basis`` for FEM solves.
+    nonHermitian : bool, optional
+        If True, use SciPy's non-Hermitian sparse eigensolver.
+    **eigsh_kwargs
+        Extra keyword arguments passed to SciPy's sparse eigensolver.
+    k_coup : scalar, matrix, dict, list, or None, optional
         Derivative coupling coefficients. A scalar creates nearest-neighbour
-        couplings between adjacent discrete levels along spatial axis 0. An
-        ``M x M`` matrix supplies the discrete coupling matrix along axis 0. A
-        dict ``{axis: scalar_or_matrix}`` chooses the spatial derivative axis.
-        In Hermitian mode, derivative coupling matrices must be skew-Hermitian.
-    v_coup : scalar, matrix, dict, or None, optional
+        couplings between adjacent discrete levels along spatial axis 0. The
+        upper off-diagonal derivative block is ``-coeff * d/dx`` and the lower
+        block uses ``conj(coeff) * d/dx`` so that the full derivative coupling
+        is Hermitian. An ``M x M`` matrix supplies the discrete coupling matrix
+        along axis 0. A dict ``{axis: scalar_or_matrix}`` chooses the spatial
+        derivative axis, allowing different coupling matrices for different
+        continuous coordinates. A list of pair dictionaries, such as
+        ``[{(0, 1): value}, {(1, 2): value}]``, supplies physical pair
+        coefficients for each continuous coordinate axis and fills the
+        Hermitian-conjugate entries automatically. In Hermitian mode, derivative
+        coupling matrices must be skew-Hermitian because ``d/dx`` is
+        anti-Hermitian.
+    v_coup : scalar, matrix, dict, list, or None, optional
         Linear position coupling coefficients. Input forms match ``k_coup``.
         A scalar creates nearest-neighbour position couplings along axis 0. In
-        Hermitian mode, position coupling matrices must be Hermitian.
+        Hermitian mode, position coupling matrices must be Hermitian. Pair
+        dictionaries fill conjugate entries automatically.
 
     Returns
     -------

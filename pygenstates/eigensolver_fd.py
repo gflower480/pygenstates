@@ -85,27 +85,75 @@ def _nearest_neighbor_coupling(M, coeff, derivative=False):
     return mat
 
 
+def _coupling_from_pairs(pairs, M, name, derivative=False):
+    mat = np.zeros((M, M), dtype=complex)
+    seen = set()
+    for key, coeff in pairs.items():
+        try:
+            row, col = key
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{name} pair keys must be two-index tuples.") from exc
+
+        row = int(row)
+        col = int(col)
+        if row == col:
+            raise ValueError(f"{name} pair dictionaries only describe off-diagonal couplings.")
+        if row < 0 or row >= M or col < 0 or col >= M:
+            raise ValueError(f"{name} pair index out of range for discrete dimension {M}.")
+
+        pair = frozenset((row, col))
+        if pair in seen:
+            raise ValueError(f"{name} pair dictionaries must not include both directions of a coupling.")
+        seen.add(pair)
+
+        if derivative:
+            mat[row, col] = -coeff
+            mat[col, row] = np.conjugate(coeff)
+        else:
+            mat[row, col] = coeff
+            mat[col, row] = np.conjugate(coeff)
+
+    return mat
+
+
+def _is_pair_dict(value):
+    return isinstance(value, dict) and all(isinstance(key, tuple) and len(key) == 2 for key in value)
+
+
 def _coupling_matrices(coup, dim, M, name, derivative=False, nonHermitian=False):
     if coup is None:
         return {}
-    if isinstance(coup, dict):
+    if isinstance(coup, (list, tuple)):
+        if len(coup) == 0:
+            return {}
+        if len(coup) > dim:
+            raise ValueError(f"{name} has entries for more axes than the continuous dimension {dim}.")
+        items = enumerate(coup)
+    elif _is_pair_dict(coup):
+        items = [(0, coup)]
+    elif isinstance(coup, dict):
         items = coup.items()
     else:
         items = [(0, coup)]
 
     mats = {}
     for axis, value in items:
+        if value is None:
+            continue
         axis = int(axis)
         if axis < 0 or axis >= dim:
             raise ValueError(f"{name} axis {axis} is out of range for dimension {dim}.")
 
-        arr = np.asarray(value)
-        if arr.ndim == 0:
-            mat = _nearest_neighbor_coupling(M, arr.item(), derivative=derivative)
+        if _is_pair_dict(value):
+            mat = _coupling_from_pairs(value, M, name, derivative=derivative)
         else:
-            mat = _validate_square_matrix(arr, name)
-            if mat.shape != (M, M):
-                raise ValueError(f"{name} matrices must have shape {(M, M)}.")
+            arr = np.asarray(value)
+            if arr.ndim == 0:
+                mat = _nearest_neighbor_coupling(M, arr.item(), derivative=derivative)
+            else:
+                mat = _validate_square_matrix(arr, name)
+                if mat.shape != (M, M):
+                    raise ValueError(f"{name} matrices must have shape {(M, M)}.")
 
         if nonHermitian:
             pass
@@ -134,57 +182,61 @@ def _sort_eigenpairs(vals, vecs):
 def eigensolver(U, N=[], domain=[], k_diag=[1], k_cross=[],
                    Enum=1, vals_only=False, nonHermitian=False, **eigsh_kwargs):
     """
-    Solve the time-independent Schrodinger equation
+    Solve a time-independent Schrodinger eigenvalue problem using finite differences.
 
-        (-sum_i k_i d^2/dx_i^2 + sum_{i<j} c_ij d^2/(dx_i dx_j) + U) psi = E psi
+    The Hamiltonian convention is::
 
-    on an n-dimensional box using finite differences on a tensor-product grid.
+        H = -sum_i k_ii d^2/dx_i^2
+            -sum_{i<j} k_ij d^2/(dx_i dx_j)
+            + U(x_i)
+
+    The solve is performed on an n-dimensional tensor-product grid with zero
+    Dirichlet boundary conditions.
 
     Parameters
     ----------
     U : callable
-        Potential function. Should accept coordinates as separate arguments:
-            1D: U(x)
-            2D: U(x, y)
-            3D: U(x, y, z)
-        and return an array of matching shape.
-    N : list[int]
-        Number of grid points in each dimension.
-    domain : list[tuple[float, float]]
-        Domain bounds in each dimension, same length as N.
-    k_diag : list[float]
-        Diagonal kinetic coefficients in each dimension.
-        The operator is:
-            -sum_i k_diag[i] * d^2/dx_i^2 + U
-    k_cross : list
-        Mixed derivative coefficients c_ij. Empty/None means no cross terms.
-        Accepted forms are:
-            dict {(i, j): value}
-            scalar in 2D
-    Enum : int
+        Potential function. It must accept one array argument per coordinate and
+        return either a scalar or an array broadcastable to the interior grid.
+    N : sequence of int
+        Number of grid points in each spatial dimension, including boundary
+        points. Each entry must be at least 3.
+    domain : sequence of tuple(float, float)
+        Bounds for each coordinate, with the same length as ``N``.
+    k_diag : sequence of float or complex
+        Diagonal kinetic coefficients ``k_ii``, one per spatial dimension.
+    k_cross : dict, scalar, or None, optional
+        Mixed-derivative coefficients ``k_ij``. Use ``{(i, j): value}`` for the
+        coefficient multiplying ``-d^2/(dx_i dx_j)``. In 2D, a scalar is
+        accepted as shorthand for ``{(0, 1): value}``. Use ``None`` or ``[]``
+        for no mixed derivative terms.
+    Enum : int, optional
         Number of eigenvalues/eigenvectors to compute.
-    vals_only : bool
-        If True, return only eigenvalues.
-    nonHermitian : bool
+    vals_only : bool, optional
+        If True, return only eigenvalues and coordinate grids.
+    nonHermitian : bool, optional
         If True, allow complex potentials and genuinely non-Hermitian terms and
-        use scipy eigs instead of eigsh. Complex Hermitian-safe couplings are
-        supported on the default eigsh path.
+        use ``scipy.sparse.linalg.eigs`` instead of ``eigsh``.
     **eigsh_kwargs
-        Optional keyword arguments passed through to scipy.sparse.linalg.eigsh/eigs,
-        such as sigma, which, tol, maxiter, or ncv. If no eigsh options are
-        supplied, sigma=0 is used to preserve the previous default.
+        Extra keyword arguments passed to SciPy's sparse eigensolver, such as
+        ``sigma``, ``which``, ``tol``, ``maxiter``, or ``ncv``. Use ``Enum``
+        rather than passing ``k`` directly. If no options are supplied, the
+        default is ``sigma=0``.
 
     Returns
     -------
     vals : ndarray
-        Eigenvalues.
-    vecs_out : ndarray
+        Eigenvalues sorted by real part, then imaginary part.
+    vecs : ndarray
         Eigenvectors reshaped onto the full tensor grid, with boundary values zero.
-        Shape:
-            (Enum, *N)
-        Returned only when vals_only=False.
+        Shape is ``(Enum, *N)``. Returned only when ``vals_only=False``.
     xlists : list[ndarray]
-        Coordinate arrays in each dimension.
+        Coordinate arrays, one per spatial dimension.
+
+    Notes
+    -----
+    With ``vals_only=False`` the return value is ``(vals, vecs, xlists)``.
+    With ``vals_only=True`` the return value is ``(vals, xlists)``.
     """
     dim = len(N)
 
@@ -266,7 +318,7 @@ def eigensolver(U, N=[], domain=[], k_diag=[1], k_cross=[],
                     Ds[axis] if axis == i or axis == j else Is[axis]
                     for axis in range(dim)
                 ]
-                T = _add_scaled_symmetric_operator(T, _kron_all(mats), coeff, nonHermitian=nonHermitian)
+                T = _add_scaled_symmetric_operator(T, _kron_all(mats), -coeff, nonHermitian=nonHermitian)
 
     grids = np.meshgrid(*xints, indexing="ij")
     Vvals = _potential_values(U, grids, Ni, nonHermitian=nonHermitian)
@@ -307,20 +359,84 @@ def Ceigensolver(U, H1, N=[], domain=[], k_diag=[1], k_cross=[],
                  k_coup=None, v_coup=None, Enum=1, vals_only=False,
                  nonHermitian=False, **eigsh_kwargs):
     """
-    Solve a coupled continuous-discrete Schrodinger problem using finite differences.
+    Solve a continuous-discrete Schrodinger problem using finite differences.
+
+    The Hamiltonian is assembled as::
 
         H = H0(x) + H1 + Hc
 
-    H1 is an MxM matrix acting on the discrete basis. The returned wavefunctions
-    have components Psi_m(x0, x1, ...), with shape (Enum, M, *N).
+    where::
 
-    k_coup gives derivative couplings and v_coup gives linear position couplings.
-    Each may be None, a scalar, an MxM matrix, or a dict {axis: scalar_or_matrix}.
-    Scalar derivative couplings create nearest-neighbour skew-Hermitian matrices;
-    scalar position couplings create nearest-neighbour Hermitian matrices.
-    Complex Hermitian-safe couplings are supported on the default eigsh path.
-    If nonHermitian=True, complex potentials and non-Hermitian coupling matrices
-    are allowed and scipy eigs is used instead of eigsh.
+        H0 = -sum_i k_ii d^2/dx_i^2
+             -sum_{i<j} k_ij d^2/(dx_i dx_j)
+             + U(x_i)
+
+        H1 = sum_n E_n |n><n|
+
+        Hc = sum_i sum_{n>m} (-k_c[i,n,m] d/dx_i + v_c[i,n,m] x_i)
+             |n><m| + Hermitian conjugate
+
+    The returned wavefunctions have components ``Psi_m(x0, x1, ...)`` in the
+    discrete basis.
+
+    Parameters
+    ----------
+    U : callable
+        Potential function for the continuous coordinates.
+    H1 : array_like, shape (M, M)
+        Matrix acting on the discrete basis. It must be Hermitian unless
+        ``nonHermitian=True``.
+    N : sequence of int
+        Number of grid points in each spatial dimension, including boundary
+        points. Each entry must be at least 3.
+    domain : sequence of tuple(float, float)
+        Bounds for each coordinate, with the same length as ``N``.
+    k_diag : sequence of float or complex
+        Diagonal kinetic coefficients ``k_ii``, one per spatial dimension.
+    k_cross : dict, scalar, or None, optional
+        Mixed-derivative coefficients for ``H0``. Uses the same convention as
+        ``eigensolver``: ``{(i, j): value}`` multiplies
+        ``-d^2/(dx_i dx_j)``.
+    k_coup : scalar, matrix, dict, list, or None, optional
+        Derivative coupling coefficients. A scalar creates nearest-neighbour
+        couplings between adjacent discrete levels along spatial axis 0. An
+        ``M x M`` matrix supplies the full discrete coupling matrix along axis
+        0. A dict ``{axis: scalar_or_matrix}`` chooses the spatial derivative
+        axis. A list of pair dictionaries, such as
+        ``[{(0, 1): value}, {(1, 2): value}]``, supplies physical pair
+        coefficients for each continuous coordinate axis and fills conjugate
+        entries automatically. In Hermitian mode, derivative coupling matrices
+        must be skew-Hermitian because ``d/dx`` is anti-Hermitian.
+    v_coup : scalar, matrix, dict, list, or None, optional
+        Linear position coupling coefficients. Input forms match ``k_coup``.
+        In Hermitian mode, position coupling matrices must be Hermitian.
+    Enum : int, optional
+        Number of eigenvalues/eigenvectors to compute.
+    vals_only : bool, optional
+        If True, return only eigenvalues and coordinate grids.
+    nonHermitian : bool, optional
+        If True, allow complex potentials and genuinely non-Hermitian terms and
+        use ``scipy.sparse.linalg.eigs`` instead of ``eigsh``.
+    **eigsh_kwargs
+        Extra keyword arguments passed to SciPy's sparse eigensolver, such as
+        ``sigma``, ``which``, ``tol``, ``maxiter``, or ``ncv``. Use ``Enum``
+        rather than passing ``k`` directly. If no options are supplied, the
+        default is ``sigma=0``.
+
+    Returns
+    -------
+    vals : ndarray
+        Eigenvalues sorted by real part, then imaginary part.
+    vecs : ndarray
+        Coupled eigenvectors on the full grid. Shape is ``(Enum, M, *N)``.
+        Returned only when ``vals_only=False``.
+    xlists : list[ndarray]
+        Coordinate arrays, one per spatial dimension.
+
+    Notes
+    -----
+    With ``vals_only=False`` the return value is ``(vals, vecs, xlists)``.
+    With ``vals_only=True`` the return value is ``(vals, xlists)``.
     """
     dim = len(N)
 
@@ -385,7 +501,7 @@ def Ceigensolver(U, H1, N=[], domain=[], k_diag=[1], k_cross=[],
             coeff = Kcross[i, j]
             if coeff != 0.0:
                 mats = [Ds_1d[axis] if axis == i or axis == j else Is[axis] for axis in range(dim)]
-                H0 = _add_scaled_symmetric_operator(H0, _kron_all(mats), coeff, nonHermitian=nonHermitian)
+                H0 = _add_scaled_symmetric_operator(H0, _kron_all(mats), -coeff, nonHermitian=nonHermitian)
 
     grids = np.meshgrid(*xints, indexing="ij")
     Vvals = _potential_values(U, grids, Ni, nonHermitian=nonHermitian)

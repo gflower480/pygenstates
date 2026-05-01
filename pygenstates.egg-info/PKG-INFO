@@ -12,6 +12,9 @@ Provides-Extra: examples
 Requires-Dist: ipykernel; extra == "examples"
 Requires-Dist: matplotlib; extra == "examples"
 Requires-Dist: notebook; extra == "examples"
+Provides-Extra: docs
+Requires-Dist: sphinx>=7; extra == "docs"
+Requires-Dist: sphinx-rtd-theme>=2; extra == "docs"
 Dynamic: license-file
 
 # pygenstates

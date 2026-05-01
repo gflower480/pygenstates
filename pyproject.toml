@@ -20,6 +20,10 @@ examples = [
     "matplotlib",
     "notebook",
 ]
+docs = [
+    "sphinx>=7",
+    "sphinx-rtd-theme>=2",
+]
 
 [tool.setuptools.packages.find]
 include = ["pygenstates*"]

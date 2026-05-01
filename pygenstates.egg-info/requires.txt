@@ -2,6 +2,10 @@ numpy
 scipy
 scikit-fem
 
+[docs]
+sphinx>=7
+sphinx-rtd-theme>=2
+
 [examples]
 ipykernel
 matplotlib

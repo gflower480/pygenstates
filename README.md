@@ -1,30 +1,26 @@
 # pygenstates
 
-A Python solver for the time-independent Schrodinger equation, with support for n-dimensional continuous bases and coupled discrete bases. The package supports a range of Hamiltonians, with circuit QED applications in mind.
+[![license](https://img.shields.io/github/license/gflower480/pygenstates)](https://opensource.org/licenses/mit)
+
+A Python solver for the time-independent Schrodinger equation, with support for an n-dimensional continuous basis as well as coupled discrete/continuous bases. The package supports a range of Hamiltonians, but was built with circuit QED applications in mind.
 
 ## Installation
 
 Install from the project root with:
 
 ```bash
-pip install .
+pip install pygenstates
 ```
 
-For development, install in editable mode:
+Useful links:
+[PyPI](https://pypi.org/project/pygenstates/)
+[Github](https://github.com/gflower480/pygenstates)
 
-```bash
-pip install -e .
-```
+## Documentation
 
-To run the example notebooks, install the optional notebook dependencies:
-
-```bash
-pip install -e ".[examples]"
-```
+Read the Docs page to be added soon...
 
 ## Examples
 
-Worked examples are included in the `examples` folder:
+Worked examples are included in the `examples` [folder](https://github.com/gflower480/pygenstates/examples).
 
-- `examples/getting_started_examples.ipynb`
-- `examples/advanced_examples.ipynb`
